@@ -963,6 +963,11 @@
     if (n === 0) { ctx.fillStyle = '#f3e3bd'; ctx.beginPath(); ctx.arc(r, r, r, 0, 7); ctx.fill(); return; }
     const arc = (Math.PI * 2) / n, dense = n > DENSE_N;
     const lw = n > 60 ? 0.8 : n > 30 ? 1.5 : n > 16 ? 2.5 : 4;          // 扇形越多，分隔線越細
+    // 先替「整個輪盤」算出同一個字級：由最長的一行、最多的行數、扇形寬度決定，所有扇形統一使用
+    const layouts = list.map(it => labelLines(it, n));
+    const longest = Math.max(...layouts.map(ls => Math.max(...ls.map(l => Array.from(l).length))));
+    const maxLines = Math.max(...layouts.map(ls => ls.length));
+    const fs = Math.max(5, Math.min(46, (dense ? 300 : 290) / longest, ((dense ? 300 : 230) * arc * 0.85) / (maxLines * 1.15)));
     list.forEach((it, i) => {
       ctx.beginPath(); ctx.moveTo(r, r);
       ctx.arc(r, r, r, i * arc, (i + 1) * arc); ctx.closePath();
@@ -972,10 +977,7 @@
       ctx.translate(r, r); ctx.rotate(i * arc + arc / 2);
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
       ctx.fillStyle = '#3b2a1a';
-      // 字級依「行數、最長行字數、扇形寬度」自動縮放；扇形再多也會全部列出
-      const lines = labelLines(it, n);
-      const longest = Math.max(...lines.map(l => Array.from(l).length));
-      const fs = Math.max(5, Math.min(46, (dense ? 300 : 290) / longest, ((dense ? 300 : 230) * arc * 0.85) / (lines.length * 1.15)));
+      const lines = layouts[i];   // 這個扇形的文字行；字級 fs 是整個輪盤共用的
       ctx.font = `800 ${fs}px "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif`;
       lines.forEach((ln, j) => ctx.fillText(ln, r - (dense ? 24 : 40), (j - (lines.length - 1) / 2) * fs * 1.15));
       ctx.restore();
