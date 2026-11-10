@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>今天吃什麼？早餐抽籤輪盤</title>
+<style>
+  /* ===== 色彩與基本設定（暖黃、橘白、薄荷綠） ===== */
+  :root {
+    --bg: #fff6dd; --card: #ffffff; --ink: #3b2a1a; --muted: #8a7358;
+    --orange: #ff8a3d; --orange-d: #e5701f; --mint: #4fc9a4; --mint-l: #dff6ee;
+    --line: #f3e3bd; --shadow: 0 10px 30px rgba(190, 120, 30, .15);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #2a2014; --card: #3a2c1c; --ink: #fff1d6; --muted: #d4b98c;
+            --mint-l: #23463c; --line: #55402a; --shadow: 0 10px 30px rgba(0,0,0,.35); }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink);
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    background: radial-gradient(circle at 15% 10%, rgba(255,200,80,.35), transparent 40%),
+                radial-gradient(circle at 90% 90%, rgba(79,201,164,.25), transparent 45%), var(--bg);
+    padding: 24px 16px 40px;
+  }
+  h1 { text-align: center; margin: 0 0 4px; font-size: clamp(1.8rem, 5vw, 2.6rem); }
+  .sub { text-align: center; color: var(--muted); margin: 0 0 24px; font-size: 1.05rem; }
+
+  /* ===== 版面：電腦並排，手機上下堆疊 ===== */
+  .layout { max-width: 980px; margin: 0 auto; display: grid; gap: 20px; grid-template-columns: 1.15fr 1fr; align-items: start; }
+  @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border-radius: 24px; box-shadow: var(--shadow); padding: 24px; }
+
+  /* ===== 輪盤 ===== */
+  .wheel-card { text-align: center; }
+  /* 菜單模式的提示列：顯示目前是哪家店，並提供返回按鈕 */
+  .mode-bar { display: none; align-items: center; justify-content: space-between; gap: 10px; background: var(--mint-l); border-radius: 16px; padding: 10px 14px; margin-bottom: 14px; text-align: left; font-weight: 700; }
+  .mode-bar.show { display: flex; }
+  .mode-bar button { font: inherit; font-weight: 700; border: 2px solid var(--mint); color: var(--ink); background: transparent; border-radius: 999px; padding: 6px 14px; cursor: pointer; white-space: nowrap; }
+  .mode-bar button:hover { background: var(--mint); color: #fff; }
+  .wheel-wrap { position: relative; width: min(100%, 420px); aspect-ratio: 1; margin: 8px auto 20px; }
+  #wheel { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 0 0 8px #fff, 0 0 0 12px var(--orange), 0 12px 30px rgba(0,0,0,.2); }
+  .wheel-wrap.menu #wheel { box-shadow: 0 0 0 8px #fff, 0 0 0 12px var(--mint), 0 12px 30px rgba(0,0,0,.2); }
+  .pointer { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); width: 0; height: 0; z-index: 2;
+    border-left: 18px solid transparent; border-right: 18px solid transparent; border-top: 40px solid #e5393b;
+    filter: drop-shadow(0 3px 3px rgba(0,0,0,.35)); }
+  .hub { position: absolute; top: 50%; left: 50%; width: 64px; height: 64px; transform: translate(-50%,-50%); border-radius: 50%;
+    background: #fff; box-shadow: 0 0 0 5px var(--orange), 0 4px 10px rgba(0,0,0,.25); display: grid; place-items: center; font-size: 1.9rem; }
+  .wheel-wrap.menu .hub { box-shadow: 0 0 0 5px var(--mint), 0 4px 10px rgba(0,0,0,.25); }
+  .btn-spin { font: inherit; font-size: 1.3rem; font-weight: 800; color: #fff; border: 0; cursor: pointer; padding: 14px 44px; border-radius: 999px;
+    background: linear-gradient(180deg, #ffa05a, var(--orange-d)); box-shadow: 0 6px 0 #b9560f, 0 10px 18px rgba(229,112,31,.4); transition: transform .1s, box-shadow .1s; }
+  .btn-spin:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 0 #b9560f; }
+  .btn-spin:disabled { background: #cfc6b8; box-shadow: 0 6px 0 #a89f91; cursor: not-allowed; color: #f4efe6; }
+  /* 選完早餐店後，常駐在輪盤下方的「抽菜單」按鈕（不怕彈窗被關掉） */
+  .btn-menu { display: block; margin: 16px auto 0; font: inherit; font-size: 1.15rem; font-weight: 800; color: #fff; border: 0; cursor: pointer; padding: 12px 28px; border-radius: 999px; background: linear-gradient(180deg, #6fdcb9, var(--mint)); box-shadow: 0 5px 0 #2f9c7d, 0 8px 16px rgba(47,156,125,.35); max-width: 100%; }
+  .btn-menu:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 #2f9c7d; }
+  .btn-menu:disabled { background: #cfc6b8; box-shadow: 0 5px 0 #a89f91; cursor: not-allowed; }
+  li.store.picked { outline: 3px solid var(--mint); }
+  .hint { min-height: 1.5em; margin: 14px 0 0; color: #d9452b; font-weight: 600; }
+
+  /* ===== 名單管理 ===== */
+  .list-card h2 { margin: 0 0 14px; font-size: 1.35rem; }
+  .add-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .add-row input { flex: 1; min-width: 0; font: inherit; font-size: 1.05rem; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: transparent; color: var(--ink); }
+  .add-row input:focus { outline: none; border-color: var(--mint); }
+  .btn-add { font: inherit; font-weight: 700; color: #fff; background: var(--mint); border: 0; border-radius: 14px; padding: 0 18px; cursor: pointer; white-space: nowrap; }
+  .btn-add:hover { filter: brightness(.95); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  li.store { padding: 10px 12px; border-radius: 14px; background: var(--mint-l); font-size: 1.05rem; }
+  li.store.current { outline: 3px solid var(--orange); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  .name { flex: 1; overflow-wrap: anywhere; }
+  .badge { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+  .icon-btn { border: 0; background: transparent; font-size: 1.15rem; cursor: pointer; padding: 5px 7px; border-radius: 8px; color: var(--ink); }
+  .icon-btn:hover { background: rgba(255,138,61,.25); }
+  .icon-btn.del:hover { background: rgba(229,57,59,.18); }
+  .icon-btn[aria-expanded="true"] { background: var(--orange); }
+  .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* 展開的店家菜單編輯區 */
+  .menu-panel { margin-top: 10px; padding: 12px; border-radius: 12px; background: var(--card); border: 2px dashed var(--line); }
+  .menu-panel h3 { margin: 0 0 8px; font-size: 1rem; }
+  .menu-panel ul { gap: 6px; margin-bottom: 10px; }
+  .menu-panel li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--mint-l); font-size: 1rem; }
+  .menu-panel .empty { color: var(--muted); font-size: .95rem; margin: 0 0 10px; }
+  .menu-panel .add-row { margin: 0; }
+  .menu-panel .add-row input { padding: 9px 12px; font-size: 1rem; }
+  .menu-panel .btn-add { padding: 0 14px; background: var(--orange); }
+  .count { color: var(--muted); font-size: .95rem; margin-top: 12px; }
+
+  /* ===== 得獎彈窗 ===== */
+  .modal { position: fixed; inset: 0; display: none; place-items: center; background: rgba(40,25,10,.55); z-index: 20; padding: 16px; }
+  .modal.show { display: grid; }
+  .modal-box { background: var(--card); border-radius: 28px; padding: 32px 28px; text-align: center; max-width: 380px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,.4); animation: pop .45s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes pop { from { transform: scale(.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal-box .emoji { font-size: 3.2rem; }
+  .modal-box p { margin: 6px 0; color: var(--muted); }
+  .modal-box .win { font-size: clamp(1.7rem, 7vw, 2.2rem); font-weight: 900; color: var(--orange-d); margin: 8px 0 20px; overflow-wrap: anywhere; }
+  .modal-actions { display: grid; gap: 10px; }
+  .modal-actions button { font: inherit; font-weight: 700; padding: 12px 24px; border: 0; border-radius: 999px; color: #fff; cursor: pointer; font-size: 1.1rem; }
+  #goMenuBtn { background: var(--orange-d); }
+  #backBtn { background: var(--orange-d); }
+  #closeBtn { background: var(--mint); }
+  #rerollBtn { background: var(--orange); }
+  /* 價格篩選列：只在菜單輪盤模式顯示 */
+  .price-filter { display: none; justify-content: center; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .price-filter.show { display: flex; }
+  .price-filter span { font-weight: 700; margin-right: 4px; }
+  .price-filter button { font: inherit; font-weight: 700; border: 2px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .price-filter button.active { background: var(--mint); border-color: var(--mint); color: #fff; }
+  .price-filter button:disabled { opacity: .5; cursor: not-allowed; }
+  .menu-panel .price { color: var(--muted); font-size: .9rem; }
+  #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #2f80ed; outline-offset: 2px; }
+
+  /* ===== v6 新增：分頁、類別、快捷店家、管理模式 ===== */
+  [hidden] { display: none !important; }
+  .tabs { max-width: 980px; margin: 0 auto 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tab { font: inherit; font-weight: 800; font-size: clamp(1rem, 3.6vw, 1.25rem); padding: 14px 10px; border-radius: 18px; border: 0; background: var(--card); color: var(--ink); cursor: pointer; box-shadow: var(--shadow); }
+  .tab.active { background: linear-gradient(180deg, #ffa05a, var(--orange-d)); color: #fff; }
+  .tab:disabled { opacity: .6; cursor: not-allowed; }
+  .cat-card h2 { margin: 0 0 6px; }
+  .cat-card .tip { margin: 0 0 16px; color: var(--muted); }
+  .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 12px; }
+  .cat-btn { font: inherit; border: 2px solid transparent; border-radius: 18px; padding: 16px 8px; background: var(--mint-l); color: var(--ink); cursor: pointer; display: grid; gap: 4px; justify-items: center; transition: transform .1s; }
+  .cat-btn:hover:not(:disabled) { border-color: var(--mint); transform: translateY(-2px); }
+  .cat-btn .em { font-size: 2rem; } .cat-btn .lb { font-weight: 800; } .cat-btn .sm { font-size: .85rem; color: var(--muted); }
+  .cat-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .mode-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .quick { margin-top: 24px; text-align: left; }
+  .quick p { margin: 0 0 8px; font-weight: 700; color: var(--muted); }
+  .quick-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .quick-list button { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 14px; border: 2px solid var(--mint); background: transparent; color: var(--ink); cursor: pointer; }
+  .quick-list button:hover:not(:disabled) { background: var(--mint); color: #fff; }
+  .quick-list button:disabled { opacity: .5; cursor: not-allowed; }
+  .list-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .list-head h2 { margin: 0; }
+  .btn-ghost { font: inherit; font-weight: 700; border: 2px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 6px 14px; cursor: pointer; white-space: nowrap; }
+  .btn-ghost.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+  .reset-row { margin-top: 12px; text-align: right; }
+  .menu-panel .cat { font-size: .75rem; background: var(--card); border-radius: 8px; padding: 1px 7px; color: var(--muted); white-space: nowrap; }
+  .menu-panel .add-row { flex-wrap: wrap; }
+  .menu-panel .add-row input[type=number] { width: 84px; flex: none; }
+  .menu-panel select { font: inherit; padding: 8px; border-radius: 12px; border: 2px solid var(--line); background: transparent; color: var(--ink); }
+  .menu-panel select option { color: #3b2a1a; }
+  .price-filter .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; flex-basis: 100%; }
+</style>
+</head>
+<body>
+  <h1>🍳 今天吃什麼？</h1>
+  <p class="sub">選店家，或直接選想吃的東西，早餐一次決定！</p>
+
+  <!-- 首頁雙模式切換 -->
+  <nav class="tabs" role="tablist">
+    <button id="tabA" class="tab active" role="tab">🏪 我要選早餐店</button>
+    <button id="tabB" class="tab" role="tab">🍳 今天我要吃這個！</button>
+  </nav>
+
+  <main class="layout">
+    <!-- 模式 B 步驟一：選食物類別 -->
+    <section id="catCard" class="card cat-card" hidden>
+      <h2>今天想吃哪一類？</h2>
+      <p class="tip">點選類別後，會列出有賣的早餐店。</p>
+      <div id="catGrid" class="cat-grid"></div>
+    </section>
+
+    <!-- 輪盤（店家輪盤 / 菜單輪盤共用） -->
+    <section id="wheelCard" class="card wheel-card">
+      <div id="modeBar" class="mode-bar">
+        <span id="modeLabel"></span>
+        <span class="mode-btns">
+          <button id="toStoreBtn" hidden>↩ 返回店家輪盤</button>
+          <button id="toCatBtn" hidden>🔁 重選類別</button>
+        </span>
+      </div>
+      <div id="priceFilter" class="price-filter" role="group" aria-label="價格篩選">
+        <span>💰 價格</span>
+        <button data-v="all" class="active">不限</button>
+        <button data-v="low">50 元以下</button>
+        <button data-v="high">超過 50 元</button>
+      </div>
+      <!-- 模式 A 進入某家店後的菜單分類（可和價格一起篩選）-->
+      <div id="catFilterRow" class="price-filter" role="group" aria-label="菜單分類">
+        <span>🍽️ 分類</span>
+        <div id="catFilterBtns" class="chips"></div>
+      </div>
+      <div id="wheelWrap" class="wheel-wrap">
+        <div class="pointer"></div>
+        <canvas id="wheel" width="1680" height="1680"></canvas>
+        <div id="hub" class="hub">☀️</div>
+      </div>
+      <button id="spinBtn" class="btn-spin">開始抽籤</button>
+      <button id="goMenuInline" class="btn-menu" style="display:none"></button>
+      <p id="hint" class="hint" role="status"></p>
+      <!-- 快捷直達：直接點店家，跳過店家輪盤 -->
+      <div id="quick" class="quick" hidden>
+        <p id="quickTitle"></p>
+        <div id="quickList" class="quick-list"></div>
+      </div>
+    </section>
+
+    <!-- 右側：店家名單（預設唯讀，按「管理名單」才能新增/刪除） -->
+    <section class="card list-card">
+      <div class="list-head">
+        <h2>早餐店名單</h2>
+        <button id="editBtn" class="btn-ghost" hidden>✏️ 管理名單</button>
+      </div>
+      <div id="storeAddRow" class="add-row" hidden>
+        <input id="nameInput" type="text" maxlength="12" placeholder="輸入店名，按 Enter 新增" autocomplete="off">
+        <button id="addBtn" class="btn-add">新增店家</button>
+      </div>
+      <ul id="list"></ul>
+      <p id="count" class="count"></p>
+      <div id="resetRow" class="reset-row" hidden><button id="resetBtn" class="btn-ghost">↺ 還原成預設名單</button></div>
+    </section>
+  </main>
+
+  <!-- 結果彈窗（店家結果 / 餐點結果共用） -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div id="winEmoji" class="emoji">🎉</div>
+      <p id="winTitle">今天就吃：</p>
+      <div id="winName" class="win"></div>
+      <div class="modal-actions">
+        <button id="goMenuBtn">🍽️ 抽這家吃什麼？</button>
+        <button id="rerollBtn">🔄 再抽一次</button>
+        <button id="backBtn">↩ 返回店家輪盤</button>
+        <button id="closeBtn">好，出發！</button>
+      </div>
+      <p id="winNote"></p>
+    </div>
+  </div>
+  <canvas id="confetti"></canvas>
+
+<script>
+(() => {
+  // ===== 後台資料（之後你只需要改這一區）=====
+  // 格式：{ "store": 店名, "menu": [ { "name": 餐點, "price": 價格, "category": 分類代號 } ] }
+  // category 必須和下方 CATEGORIES 裡的 key 完全一樣（例如「蛋餅類」「飲料」），模式 B 才抓得到
+  // 新增店家：複製一個 { ... } 區塊貼在後面，區塊之間要加逗號
+  const STORE_DATA = [
+    {
+      "store": "樂利早午餐",
+      "menu": [
+        { "name": "招牌漢堡加蛋", "price": 75, "category": "漢堡類" },
+        { "name": "招牌漢堡起士", "price": 75, "category": "漢堡類" },
+        { "name": "漢堡起士蛋", "price": 85, "category": "漢堡類" },
+        { "name": "招牌漢堡不蛋", "price": 65, "category": "漢堡類" },
+        { "name": "鮪魚漢堡加蛋", "price": 65, "category": "漢堡類" },
+        { "name": "鮪魚漢堡不蛋", "price": 55, "category": "漢堡類" },
+        { "name": "椰香奶酥軟法", "price": 50, "category": "各種麵包類" },
+        { "name": "酸甜草莓醬軟法", "price": 50, "category": "各種麵包類" },
+        { "name": "濃醇花生醬軟法", "price": 50, "category": "各種麵包類" },
+        { "name": "香濃巧克力軟法", "price": 50, "category": "各種麵包類" },
+        { "name": "田園野菜蛋軟法", "price": 65, "category": "各種麵包類" },
+        { "name": "火腿加蛋軟法", "price": 65, "category": "各種麵包類" },
+        { "name": "德式香腸軟法", "price": 65, "category": "各種麵包類" },
+        { "name": "培根加蛋軟法", "price": 70, "category": "各種麵包類" },
+        { "name": "鮪魚加蛋軟法", "price": 75, "category": "各種麵包類" },
+        { "name": "豬肉加蛋軟法", "price": 75, "category": "各種麵包類" },
+        { "name": "雞肉加蛋軟法", "price": 75, "category": "各種麵包類" },
+        { "name": "火腿起士蛋軟法", "price": 70, "category": "各種麵包類" },
+        { "name": "培根起士蛋軟法", "price": 75, "category": "各種麵包類" },
+        { "name": "豬肉起士蛋軟法", "price": 80, "category": "各種麵包類" },
+        { "name": "牛肉起士蛋軟法", "price": 85, "category": "各種麵包類" },
+        { "name": "荷包蛋咖哩飯", "price": 70, "category": "飯及飯糰類" },
+        { "name": "豬肉片咖哩飯", "price": 80, "category": "飯及飯糰類" },
+        { "name": "豬肉蛋咖哩飯", "price": 90, "category": "飯及飯糰類" },
+        { "name": "德式香腸咖哩飯", "price": 85, "category": "飯及飯糰類" },
+        { "name": "雞柳咖哩飯", "price": 85, "category": "飯及飯糰類" },
+        { "name": "雞柳蛋咖哩飯", "price": 95, "category": "飯及飯糰類" },
+        { "name": "煎豬排咖哩飯", "price": 165, "category": "飯及飯糰類" },
+        { "name": "單點煎豬排炒泡麵", "price": 105, "category": "各種麵類" },
+        { "name": "清炒炒泡麵", "price": 65, "category": "各種麵類" },
+        { "name": "蛋炒炒泡麵", "price": 75, "category": "各種麵類" },
+        { "name": "豬肉片炒泡麵", "price": 95, "category": "各種麵類" },
+        { "name": "培根炒泡麵", "price": 95, "category": "各種麵類" },
+        { "name": "德式香腸炒泡麵", "price": 100, "category": "各種麵類" },
+        { "name": "煎豬排炒泡麵", "price": 165, "category": "各種麵類" },
+        { "name": "單點煎豬排鐵板麵", "price": 105, "category": "各種麵類" },
+        { "name": "清炒鐵板麵", "price": 70, "category": "各種麵類" },
+        { "name": "蛋炒鐵板麵", "price": 80, "category": "各種麵類" },
+        { "name": "豬肉片鐵板麵", "price": 100, "category": "各種麵類" },
+        { "name": "培根鐵板麵", "price": 100, "category": "各種麵類" },
+        { "name": "德式香腸鐵板麵", "price": 105, "category": "各種麵類" },
+        { "name": "煎豬排鐵板麵", "price": 170, "category": "各種麵類" },
+        { "name": "原味蛋餅", "price": 35, "category": "蛋餅類" },
+        { "name": "起士蛋餅", "price": 40, "category": "蛋餅類" },
+        { "name": "火腿蛋餅", "price": 40, "category": "蛋餅類" },
+        { "name": "肉鬆蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "蔥香蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "玉米蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "培根蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "火腿起士蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "玉米起士蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "培根起士蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "鮪魚蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "鮪魚起士蛋餅", "price": 65, "category": "蛋餅類" },
+        { "name": "豬肉片蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "豬肉起士蛋餅", "price": 65, "category": "蛋餅類" },
+        { "name": "雙蛋蔥香蛋餅", "price": 65, "category": "蛋餅類" },
+        { "name": "雙蛋豬肉蛋餅", "price": 70, "category": "蛋餅類" },
+        { "name": "培根玉米蛋餅", "price": 60, "category": "蛋餅類" },
+        { "name": "單片蘿蔔糕", "price": 30, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "單片淋蛋蘿蔔糕", "price": 45, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "兩片蘿蔔糕", "price": 45, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "兩片淋蛋蘿蔔糕", "price": 60, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "椰香奶酥烤吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "酸甜草莓醬烤吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "濃醇花生醬烤吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "香濃巧克力烤吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "田園野菜蛋烤吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "火腿加蛋烤吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "起士加蛋烤吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "培根加蛋烤吐司", "price": 60, "category": "吐司及三明治類" },
+        { "name": "鮪魚加蛋烤吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "豬肉加蛋烤吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "雞肉加蛋烤吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "牛肉加蛋烤吐司", "price": 70, "category": "吐司及三明治類" },
+        { "name": "火腿起士蛋烤吐司", "price": 60, "category": "吐司及三明治類" },
+        { "name": "培根起士蛋烤吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "鮪魚起士蛋烤吐司", "price": 70, "category": "吐司及三明治類" },
+        { "name": "豬肉起士蛋烤吐司", "price": 70, "category": "吐司及三明治類" },
+        { "name": "牛肉起士蛋烤吐司", "price": 75, "category": "吐司及三明治類" },
+        { "name": "漢堡排加蛋烤吐司", "price": 75, "category": "吐司及三明治類" },
+        { "name": "現煎半熟蛋", "price": 20, "category": "點心類" },
+        { "name": "蔥花煎蛋", "price": 35, "category": "點心類" },
+        { "name": "玉米煎蛋", "price": 35, "category": "點心類" },
+        { "name": "預煎全熟蛋", "price": 15, "category": "點心類" },
+        { "name": "現煎全熟蛋", "price": 20, "category": "點心類" },
+        { "name": "單點豬肉片", "price": 25, "category": "點心類" },
+        { "name": "單點德式香腸", "price": 30, "category": "點心類" },
+        { "name": "單點漢堡排", "price": 50, "category": "點心類" },
+        { "name": "單點煎豬排", "price": 105, "category": "點心類" },
+        { "name": "日月潭紅茶(480cc)", "price": 25, "category": "飲料" },
+        { "name": "檸檬紅茶(480cc)", "price": 45, "category": "飲料" },
+        { "name": "紅茶鮮奶(480cc)", "price": 50, "category": "飲料" },
+        { "name": "研磨杏仁鮮奶(480cc)", "price": 75, "category": "飲料" },
+        { "name": "招牌奶茶(480cc)", "price": 35, "category": "飲料" },
+        { "name": "純天然檸檬汁(480cc)", "price": 50, "category": "飲料" },
+        { "name": "無糖無奶黑咖啡(480cc)", "price": 60, "category": "飲料" },
+        { "name": "特調咖啡-奶精(480cc)", "price": 75, "category": "飲料" },
+        { "name": "原味拿鐵-鮮奶(480cc)", "price": 75, "category": "飲料" },
+        { "name": "無糖無奶黑咖啡(360cc)", "price": 40, "category": "飲料" },
+        { "name": "特調咖啡-奶精(360cc)", "price": 50, "category": "飲料" },
+        { "name": "原味拿鐵-鮮奶(360cc)", "price": 50, "category": "飲料" },
+        { "name": "有糖豆漿(480cc)", "price": 25, "category": "飲料" },
+        { "name": "無糖豆漿(480cc)", "price": 25, "category": "飲料" }
+      ]
+    },
+    {
+      "store": "本家早午餐",
+      "menu": [
+        { "name": "總匯漢堡", "price": 75, "category": "漢堡類" },
+        { "name": "總匯三明治", "price": 65, "category": "吐司及三明治類" },
+        { "name": "卡拉雞腿蛋堡", "price": 75, "category": "漢堡類" },
+        { "name": "卡拉雞腿蛋吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "香烤雞腿排蛋堡", "price": 70, "category": "漢堡類" },
+        { "name": "香烤雞腿排蛋吐司", "price": 60, "category": "吐司及三明治類" },
+        { "name": "藍帶起司豬排蛋堡", "price": 75, "category": "漢堡類" },
+        { "name": "藍帶起司豬排蛋吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "漢堡肉蛋堡", "price": 70, "category": "漢堡類" },
+        { "name": "漢堡肉蛋吐司", "price": 60, "category": "吐司及三明治類" },
+        { "name": "蝦排蛋堡漢堡", "price": 70, "category": "漢堡類" },
+        { "name": "蝦排蛋吐司", "price": 60, "category": "吐司及三明治類" },
+        { "name": "黑胡椒燻雞蛋堡", "price": 65, "category": "漢堡類" },
+        { "name": "黑胡椒燻雞蛋吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "香雞蛋堡", "price": 65, "category": "漢堡類" },
+        { "name": "香雞蛋吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "里肌肉蛋堡", "price": 65, "category": "漢堡類" },
+        { "name": "里肌肉蛋吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "起司培根蛋堡", "price": 65, "category": "漢堡類" },
+        { "name": "起司培根蛋吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "三杯雞肉蛋堡", "price": 65, "category": "漢堡類" },
+        { "name": "三杯雞肉蛋吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "黑胡椒鮪魚蛋堡", "price": 70, "category": "漢堡類" },
+        { "name": "黑胡椒鮪魚蛋吐司", "price": 60, "category": "吐司及三明治類" },
+        { "name": "薯餅蛋堡", "price": 65, "category": "漢堡類" },
+        { "name": "薯餅蛋吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "奶油火腿蛋堡", "price": 60, "category": "漢堡類" },
+        { "name": "奶油火腿蛋吐司", "price": 50, "category": "吐司及三明治類" },
+        { "name": "起司蛋堡", "price": 60, "category": "漢堡類" },
+        { "name": "起司蛋吐司", "price": 50, "category": "吐司及三明治類" },
+        { "name": "肉鬆蛋堡", "price": 55, "category": "漢堡類" },
+        { "name": "肉鬆蛋吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "培根蛋堡", "price": 55, "category": "漢堡類" },
+        { "name": "培根蛋吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "火腿蛋堡", "price": 55, "category": "漢堡類" },
+        { "name": "火腿蛋吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "煎蛋堡", "price": 50, "category": "漢堡類" },
+        { "name": "煎蛋吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "招牌飯糰", "price": 50, "category": "飯及飯糰類" },
+        { "name": "五穀米飯糰", "price": 55, "category": "飯及飯糰類" },
+        { "name": "素飯糰", "price": 50, "category": "飯及飯糰類" },
+        { "name": "甜飯糰", "price": 50, "category": "飯及飯糰類" },
+        { "name": "鹹甜綜合飯糰", "price": 55, "category": "飯及飯糰類" },
+        { "name": "三杯雞飯糰", "price": 55, "category": "飯及飯糰類" },
+        { "name": "起司培根飯糰", "price": 60, "category": "飯及飯糰類" },
+        { "name": "起士蔬菜飯糰", "price": 55, "category": "飯及飯糰類" },
+        { "name": "黑胡椒鮪魚飯糰", "price": 60, "category": "飯及飯糰類" },
+        { "name": "火腿蛋飯糰", "price": 55, "category": "飯及飯糰類" },
+        { "name": "里肌肉飯糰", "price": 55, "category": "飯及飯糰類" },
+        { "name": "燻雞飯糰", "price": 55, "category": "飯及飯糰類" },
+        { "name": "香腸肉鬆飯糰", "price": 60, "category": "飯及飯糰類" },
+        { "name": "阿華田吐司", "price": 35, "category": "吐司及三明治類" },
+        { "name": "阿華田厚片", "price": 45, "category": "吐司及三明治類" },
+        { "name": "草莓吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "草莓厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "藍莓吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "藍莓厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "花生吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "花生厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "巧克力吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "巧克力厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "奶油吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "奶油厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "抹茶吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "抹茶厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "奶酥吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "奶酥厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "香蒜吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "香蒜厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "黑芝麻吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "黑芝麻厚片", "price": 35, "category": "吐司及三明治類" },
+        { "name": "原味蛋餅", "price": 35, "category": "蛋餅類" },
+        { "name": "玉米蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "起司蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "培根蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "火腿蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "肉鬆蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "泡菜蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "黑胡椒燻雞蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "鮪魚蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "三杯雞蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "里肌肉蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "薯餅蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "蔬菜蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "蔬菜起司蛋餅", "price": 60, "category": "蛋餅類" },
+        { "name": "熱狗蛋餅", "price": 60, "category": "蛋餅類" },
+        { "name": "菜脯蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "原味乳酪餅", "price": 40, "category": "蛋餅類" },
+        { "name": "玉米乳酪餅", "price": 50, "category": "蛋餅類" },
+        { "name": "起司乳酪餅", "price": 50, "category": "蛋餅類" },
+        { "name": "培根乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "火腿乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "肉鬆乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "泡菜乳酪餅", "price": 65, "category": "蛋餅類" },
+        { "name": "黑胡椒燻雞乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "鮪魚乳酪餅", "price": 60, "category": "蛋餅類" },
+        { "name": "三杯雞乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "里肌肉乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "薯餅乳酪餅", "price": 60, "category": "蛋餅類" },
+        { "name": "蔬菜乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "蔬菜起司乳酪餅", "price": 65, "category": "蛋餅類" },
+        { "name": "熱狗乳酪餅", "price": 65, "category": "蛋餅類" },
+        { "name": "菜脯乳酪餅", "price": 55, "category": "蛋餅類" },
+        { "name": "黑胡椒鐵板麵(單點)", "price": 55, "category": "各種麵類" },
+        { "name": "蘑菇鐵板麵(單點)", "price": 55, "category": "各種麵類" },
+        { "name": "義大利肉醬麵(單點)", "price": 65, "category": "各種麵類" },
+        { "name": "宮保雞丁麵(單點)", "price": 70, "category": "各種麵類" },
+        { "name": "古早味辣肉醬麵(單點)", "price": 70, "category": "各種麵類" },
+        { "name": "黑胡椒鐵板麵(套餐含里肌肉+蛋)", "price": 80, "category": "套餐" },
+        { "name": "蘑菇鐵板麵(套餐含里肌肉+蛋)", "price": 80, "category": "套餐" },
+        { "name": "義大利肉醬麵(套餐含里肌肉+蛋)", "price": 90, "category": "套餐" },
+        { "name": "宮保雞丁麵(套餐含里肌肉+蛋)", "price": 95, "category": "套餐" },
+        { "name": "古早味辣肉醬麵(套餐含里肌肉+蛋)", "price": 95, "category": "套餐" },
+        { "name": "卡拉雞腿排", "price": 50, "category": "點心類" },
+        { "name": "考雞腿排", "price": 45, "category": "點心類" },
+        { "name": "蝦排", "price": 50, "category": "點心類" },
+        { "name": "蘿蔔糕", "price": 50, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "地瓜抓餅", "price": 45, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "薯條", "price": 45, "category": "點心類" },
+        { "name": "薯餅", "price": 45, "category": "點心類" },
+        { "name": "玉米布丁酥", "price": 45, "category": "點心類" },
+        { "name": "雞米花", "price": 45, "category": "點心類" },
+        { "name": "雞塊", "price": 45, "category": "點心類" },
+        { "name": "小熱狗", "price": 35, "category": "點心類" },
+        { "name": "里肌肉", "price": 25, "category": "點心類" },
+        { "name": "漢堡肉排", "price": 25, "category": "點心類" },
+        { "name": "火腿", "price": 20, "category": "點心類" },
+        { "name": "培根", "price": 20, "category": "點心類" },
+        { "name": "蔥蛋", "price": 20, "category": "點心類" },
+        { "name": "荷包蛋", "price": 15, "category": "點心類" },
+        { "name": "素香鬆堡", "price": 50, "category": "漢堡類" },
+        { "name": "素香鬆吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "草莓蛋吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "花生蛋吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "A套餐 卡拉雞腿堡餐", "price": 185, "category": "套餐" },
+        { "name": "B套餐 總匯三明治餐", "price": 175, "category": "套餐" },
+        { "name": "C套餐 起司蛋餅餐", "price": 135, "category": "套餐" },
+        { "name": "紅茶(500cc)", "price": 30, "category": "飲料" },
+        { "name": "綠茶(500cc)", "price": 30, "category": "飲料" },
+        { "name": "豆漿(500cc)", "price": 25, "category": "飲料" },
+        { "name": "豆漿紅茶(500cc)", "price": 35, "category": "飲料" },
+        { "name": "奶茶(500cc)", "price": 40, "category": "飲料" },
+        { "name": "阿華田(500cc)", "price": 45, "category": "飲料" },
+        { "name": "巧克力(500cc)", "price": 45, "category": "飲料" },
+        { "name": "鮮奶茶(500cc)", "price": 50, "category": "飲料" },
+        { "name": "豆漿(400cc)", "price": 20, "category": "飲料" },
+        { "name": "鮮奶(400cc)", "price": 60, "category": "飲料" },
+        { "name": "咖啡奶茶(500cc)", "price": 60, "category": "飲料" },
+        { "name": "咖啡豆漿(500cc)", "price": 60, "category": "飲料" },
+        { "name": "黑咖啡", "price": 50, "category": "飲料" },
+        { "name": "招牌咖啡", "price": 55, "category": "飲料" },
+        { "name": "拿鐵", "price": 70, "category": "飲料" },
+        { "name": "卡布奇諾", "price": 70, "category": "飲料" }
+      ]
+    },
+    {
+      "store": "達利早餐",
+      "menu": [
+        { "name": "蜜焙卡啦雞布里歐堡", "price": 80, "category": "漢堡類" },
+        { "name": "蕈菇嫩蛋布里歐堡", "price": 65, "category": "漢堡類" },
+        { "name": "黃金厚炸豬排布里歐堡", "price": 85, "category": "漢堡類" },
+        { "name": "漢堡肉布里歐堡", "price": 45, "category": "漢堡類" },
+        { "name": "麥香雞布里歐堡", "price": 45, "category": "漢堡類" },
+        { "name": "牛肉起士布里歐堡", "price": 70, "category": "漢堡類" },
+        { "name": "里肌豬排布里歐堡", "price": 60, "category": "漢堡類" },
+        { "name": "檸檬優格魚排布里歐堡", "price": 70, "category": "漢堡類" },
+        { "name": "蜜焙雞胸布里歐堡", "price": 75, "category": "漢堡類" },
+        { "name": "檸檬優格雞胸布里歐堡", "price": 75, "category": "漢堡類" },
+        { "name": "BBQ雞腿排布里歐堡", "price": 80, "category": "漢堡類" },
+        { "name": "胡麻豬排布里歐堡", "price": 85, "category": "漢堡類" },
+        { "name": "美式厚牛布里歐堡", "price": 98, "category": "漢堡類" },
+        { "name": "地瓜素鬆半熟吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "經典蛋沙拉半熟吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "檸檬優格魚排半熟吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "蔥蛋里肌半熟吐司", "price": 65, "category": "吐司及三明治類" },
+        { "name": "方火腿半熟吐司", "price": 35, "category": "吐司及三明治類" },
+        { "name": "漢堡肉半熟吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "麥香雞半熟吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "鮮蔬嫩蛋半熟吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "里肌豬排半熟吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "甜鮪魚半熟吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "蜜焙香煎雞胸半熟吐司", "price": 70, "category": "吐司及三明治類" },
+        { "name": "檸檬優格雞胸半熟吐司", "price": 70, "category": "吐司及三明治類" },
+        { "name": "鮪魚蛋沙拉半熟總匯", "price": 75, "category": "吐司及三明治類" },
+        { "name": "總匯三明治半熟總匯", "price": 75, "category": "吐司及三明治類" },
+        { "name": "里肌總匯半熟總匯", "price": 80, "category": "吐司及三明治類" },
+        { "name": "花生蜜焙卡啦雞半熟總匯", "price": 98, "category": "吐司及三明治類" },
+        { "name": "BBQ雞腿排半熟總匯", "price": 95, "category": "吐司及三明治類" },
+        { "name": "原味蛋餅", "price": 30, "category": "蛋餅類" },
+        { "name": "火腿蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "起士蛋餅", "price": 40, "category": "蛋餅類" },
+        { "name": "拉絲蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "玉米蛋餅", "price": 40, "category": "蛋餅類" },
+        { "name": "蔬菜蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "豬排蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "鮪魚蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "厚蛋蔥香蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "薯餅起士蛋餅", "price": 60, "category": "蛋餅類" },
+        { "name": "地瓜素鬆鮮蔬捲", "price": 60, "category": "各種麵包類" },
+        { "name": "蜜焙卡啦雞捲", "price": 85, "category": "各種麵包類" },
+        { "name": "胡麻炸豬排捲", "price": 85, "category": "各種麵包類" },
+        { "name": "檸檬優格雞胸捲", "price": 85, "category": "各種麵包類" },
+        { "name": "黃金厚炸豬排捲", "price": 85, "category": "各種麵包類" },
+        { "name": "原味蜂蜜法式", "price": 50, "category": "吐司及三明治類" },
+        { "name": "鹽可頌(附草莓醬/奶油)", "price": 45, "category": "各種麵包類" },
+        { "name": "黑麥歐包(附草莓醬/奶油)", "price": 45, "category": "各種麵包類" },
+        { "name": "晨光厚片(附草莓醬/奶油)", "price": 50, "category": "吐司及三明治類" },
+        { "name": "英式圓鬆餅(附草莓醬/奶油/蜂蜜)", "price": 50, "category": "各種麵包類" },
+        { "name": "奶油餐包(內含奶油夾餡)", "price": 35, "category": "各種麵包類" },
+        { "name": "鮮蝦蛋沙拉鹽可頌", "price": 90, "category": "各種麵包類" },
+        { "name": "蕈菇嫩蛋鹽可頌", "price": 75, "category": "各種麵包類" },
+        { "name": "地瓜火腿鹽可頌", "price": 65, "category": "各種麵包類" },
+        { "name": "鮮蝦蛋沙拉黑麥歐包", "price": 90, "category": "各種麵包類" },
+        { "name": "蕈菇嫩蛋黑麥歐包", "price": 75, "category": "各種麵包類" },
+        { "name": "地瓜火腿黑麥歐包", "price": 65, "category": "各種麵包類" },
+        { "name": "美味草莓吐司(薄片)", "price": 25, "category": "吐司及三明治類" },
+        { "name": "美味草莓吐司(厚片)", "price": 45, "category": "吐司及三明治類" },
+        { "name": "濃巧克力吐司(薄片)", "price": 25, "category": "吐司及三明治類" },
+        { "name": "濃巧克力吐司(厚片)", "price": 45, "category": "吐司及三明治類" },
+        { "name": "撲鼻香蒜吐司(薄片)", "price": 25, "category": "吐司及三明治類" },
+        { "name": "撲鼻香蒜吐司(厚片)", "price": 45, "category": "吐司及三明治類" },
+        { "name": "香濃奶酥吐司(薄片)", "price": 25, "category": "吐司及三明治類" },
+        { "name": "香濃奶酥吐司(厚片)", "price": 45, "category": "吐司及三明治類" },
+        { "name": "顆粒花生吐司(薄片)", "price": 25, "category": "吐司及三明治類" },
+        { "name": "顆粒花生吐司(厚片)", "price": 45, "category": "吐司及三明治類" },
+        { "name": "Oreo煉乳厚片", "price": 55, "category": "吐司及三明治類" },
+        { "name": "眷村蝦米蔥拌麵", "price": 78, "category": "各種麵類" },
+        { "name": "達利炒麵", "price": 65, "category": "各種麵類" },
+        { "name": "黑胡椒鐵板麵", "price": 50, "category": "各種麵類" },
+        { "name": "蘑菇鐵板麵", "price": 50, "category": "各種麵類" },
+        { "name": "宮保雞丁鐵板麵", "price": 60, "category": "各種麵類" },
+        { "name": "招牌中式(蘿蔔糕+煎餃+荷包蛋)", "price": 65, "category": "套餐" },
+        { "name": "中式Double(原味蛋餅+蘿蔔糕+雞塊)", "price": 80, "category": "套餐" },
+        { "name": "小朋友最愛(果醬吐司+荷包蛋+熱狗+薯條)", "price": 70, "category": "套餐" },
+        { "name": "鐵板麵Combo", "price": 85, "category": "各種麵類" },
+        { "name": "蔥抓餅", "price": 40, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "蘿蔔糕", "price": 45, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "煎餃", "price": 40, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "招牌和風炒烏龍", "price": 120, "category": "各種麵類" },
+        { "name": "辣味噌炒烏龍", "price": 135, "category": "各種麵類" },
+        { "name": "家傳椒麻炒烏龍", "price": 125, "category": "各種麵類" },
+        { "name": "慢煮百菇炒烏龍", "price": 110, "category": "各種麵類" },
+        { "name": "招牌和風湯烏龍", "price": 135, "category": "各種麵類" },
+        { "name": "慢煮百菇湯烏龍", "price": 120, "category": "各種麵類" },
+        { "name": "味噌湯烏龍", "price": 145, "category": "各種麵類" },
+        { "name": "經典番茄肉醬義大利麵", "price": 105, "category": "各種麵類" },
+        { "name": "義式青醬草菇義大利麵", "price": 130, "category": "各種麵類" },
+        { "name": "青醬草菇雞胸義大利麵", "price": 150, "category": "各種麵類" },
+        { "name": "奶油白醬草菇義大利麵", "price": 130, "category": "各種麵類" },
+        { "name": "奶油草菇香煎雞腿義大利麵", "price": 160, "category": "各種麵類" },
+        { "name": "牧場蕈菇水耕沙拉", "price": 125, "category": "沙拉" },
+        { "name": "蛋沙拉水耕沙拉", "price": 110, "category": "沙拉" },
+        { "name": "嫩煎雞胸水耕沙拉", "price": 130, "category": "沙拉" },
+        { "name": "舒肥雞水耕沙拉", "price": 158, "category": "沙拉" },
+        { "name": "泰香打拋達利碗", "price": 168, "category": "飯及飯糰類" },
+        { "name": "朝日厚切豬排達利碗", "price": 175, "category": "飯及飯糰類" },
+        { "name": "蔥鹽舒肥雞達利碗", "price": 168, "category": "飯及飯糰類" },
+        { "name": "晨光野菇豆腐達利碗", "price": 145, "category": "飯及飯糰類" },
+        { "name": "英式圓餐包集合餐", "price": 140, "category": "套餐" },
+        { "name": "鬆餅好時光集合餐", "price": 150, "category": "套餐" },
+        { "name": "經典法式雞腿集合餐", "price": 160, "category": "套餐" },
+        { "name": "黑麥歐包集合餐", "price": 160, "category": "套餐" },
+        { "name": "Here!鹽可頌集合餐", "price": 155, "category": "套餐" },
+        { "name": "經典晨光集合餐", "price": 155, "category": "套餐" },
+        { "name": "布里歐堡堡餐", "price": 155, "category": "套餐" },
+        { "name": "荷包蛋", "price": 15, "category": "點心類" },
+        { "name": "小熱狗", "price": 20, "category": "點心類" },
+        { "name": "薯餅", "price": 25, "category": "點心類" },
+        { "name": "鮮奶炒蛋", "price": 35, "category": "點心類" },
+        { "name": "酥炸脆薯", "price": 45, "category": "點心類" },
+        { "name": "地瓜球", "price": 40, "category": "點心類" },
+        { "name": "檸檬優格雞柳", "price": 50, "category": "點心類" },
+        { "name": "麥克雞塊", "price": 38, "category": "點心類" },
+        { "name": "蜜焙雞塊", "price": 45, "category": "點心類" },
+        { "name": "薯餅起士蛋塔", "price": 45, "category": "點心類" },
+        { "name": "紅茶(M)", "price": 20, "category": "飲料" },
+        { "name": "紅茶(L)", "price": 25, "category": "飲料" },
+        { "name": "無糖綠茶(M)", "price": 20, "category": "飲料" },
+        { "name": "無糖綠茶(L)", "price": 25, "category": "飲料" },
+        { "name": "達利奶茶(M)", "price": 30, "category": "飲料" },
+        { "name": "達利奶茶(L)", "price": 35, "category": "飲料" },
+        { "name": "花園奶茶(L)", "price": 45, "category": "飲料" },
+        { "name": "蜂釀牛奶(M)", "price": 50, "category": "飲料" },
+        { "name": "香蜜鮮奶茶(M)", "price": 45, "category": "飲料" },
+        { "name": "豆漿(M)", "price": 25, "category": "飲料" },
+        { "name": "豆漿(L)", "price": 30, "category": "飲料" },
+        { "name": "豆奶紅茶(M)", "price": 25, "category": "飲料" },
+        { "name": "豆奶紅茶(L)", "price": 30, "category": "飲料" },
+        { "name": "鮮檸檬紅茶(M)", "price": 25, "category": "飲料" },
+        { "name": "鮮檸檬紅茶(L)", "price": 30, "category": "飲料" },
+        { "name": "鮮奶茶(M)", "price": 35, "category": "飲料" },
+        { "name": "鮮奶茶(L)", "price": 40, "category": "飲料" },
+        { "name": "花園鮮奶茶(L)", "price": 50, "category": "飲料" },
+        { "name": "經典可可(M)", "price": 45, "category": "飲料" },
+        { "name": "經典可可(L)", "price": 50, "category": "飲料" },
+        { "name": "達利濃湯(冬)", "price": 40, "category": "飲料" },
+        { "name": "天然柳橙原汁(M)", "price": 65, "category": "飲料" },
+        { "name": "奇異果綜合汁(M)", "price": 65, "category": "飲料" },
+        { "name": "美式咖啡(M)", "price": 35, "category": "飲料" },
+        { "name": "美式咖啡(L)", "price": 45, "category": "飲料" },
+        { "name": "招牌拿鐵(M)", "price": 50, "category": "飲料" },
+        { "name": "招牌拿鐵(L)", "price": 60, "category": "飲料" },
+        { "name": "焦糖拿鐵(M)", "price": 60, "category": "飲料" },
+        { "name": "焦糖拿鐵(L)", "price": 70, "category": "飲料" },
+        { "name": "榛果拿鐵(M)", "price": 60, "category": "飲料" },
+        { "name": "榛果拿鐵(L)", "price": 70, "category": "飲料" },
+        { "name": "香蜜美式(M)", "price": 45, "category": "飲料" },
+        { "name": "香蜜拿鐵(M)", "price": 60, "category": "飲料" },
+        { "name": "特調咖啡(M)", "price": 45, "category": "飲料" },
+        { "name": "特調咖啡(L)", "price": 55, "category": "飲料" }
+      ]
+    },
+    {
+      "store": "早安美芝城",
+      "menu": [
+        { "name": "1983經典豬肉堡", "price": 45, "category": "漢堡類" },
+        { "name": "黃金蝦餅堡", "price": 49, "category": "漢堡類" },
+        { "name": "早美肯瓊辣雞堡", "price": 55, "category": "漢堡類" },
+        { "name": "鐵板豬柳堡", "price": 55, "category": "漢堡類" },
+        { "name": "里肌豬排堡", "price": 60, "category": "漢堡類" },
+        { "name": "卡啦雞腿堡", "price": 70, "category": "漢堡類" },
+        { "name": "早美雞腿排堡", "price": 75, "category": "漢堡類" },
+        { "name": "美式黃金鱈魚堡", "price": 65, "category": "漢堡類" },
+        { "name": "日式燒肉蛋堡", "price": 65, "category": "漢堡類" },
+        { "name": "美式花生醬牛肉堡", "price": 60, "category": "漢堡類" },
+        { "name": "美式經典牛肉堡", "price": 65, "category": "漢堡類" },
+        { "name": "墨西哥辣牛肉堡", "price": 65, "category": "漢堡類" },
+        { "name": "花生朝食厚吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "巧克力朝食厚吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "奶酥朝食厚吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "香蒜朝食厚吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "藍莓乳酪朝食厚吐司", "price": 50, "category": "吐司及三明治類" },
+        { "name": "瑞士草莓朝食厚吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "牧場蛋沙拉朝食吐司", "price": 75, "category": "吐司及三明治類" },
+        { "name": "里肌豬排半熟蛋朝食吐司", "price": 95, "category": "吐司及三明治類" },
+        { "name": "手作薯泥吐司", "price": 40, "category": "吐司及三明治類" },
+        { "name": "1983經典豬肉吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "鮪魚沙拉吐司", "price": 45, "category": "吐司及三明治類" },
+        { "name": "早美肯瓊辣雞吐司", "price": 50, "category": "吐司及三明治類" },
+        { "name": "火腿蛋吐司", "price": 50, "category": "吐司及三明治類" },
+        { "name": "鐵板豬柳吐司", "price": 50, "category": "吐司及三明治類" },
+        { "name": "培根蛋吐司", "price": 55, "category": "吐司及三明治類" },
+        { "name": "里肌豬排吐司", "price": 60, "category": "吐司及三明治類" },
+        { "name": "早美雞腿排吐司", "price": 70, "category": "吐司及三明治類" },
+        { "name": "花生吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "巧克力吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "奶酥吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "香蒜吐司", "price": 25, "category": "吐司及三明治類" },
+        { "name": "藍莓乳酪吐司", "price": 30, "category": "吐司及三明治類" },
+        { "name": "瑞士草莓吐司", "price": 35, "category": "吐司及三明治類" },
+        { "name": "港式蘿蔔糕", "price": 39, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "原味蛋餅", "price": 35, "category": "蛋餅類" },
+        { "name": "玉米蛋餅", "price": 40, "category": "蛋餅類" },
+        { "name": "火腿蛋餅", "price": 40, "category": "蛋餅類" },
+        { "name": "雙蛋蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "培根蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "雙層日式蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "起司蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "鮪魚蛋餅", "price": 45, "category": "蛋餅類" },
+        { "name": "手作薯泥起司蛋餅", "price": 50, "category": "蛋餅類" },
+        { "name": "九層塔豬柳蛋餅", "price": 55, "category": "蛋餅類" },
+        { "name": "里肌豬排蛋餅", "price": 60, "category": "蛋餅類" },
+        { "name": "日式燒肉蛋餅", "price": 65, "category": "蛋餅類" },
+        { "name": "起司蛋丹麥", "price": 79, "category": "各種麵包類" },
+        { "name": "手作薯泥蛋丹麥", "price": 85, "category": "各種麵包類" },
+        { "name": "培根蛋丹麥", "price": 85, "category": "各種麵包類" },
+        { "name": "鮪魚蛋丹麥", "price": 90, "category": "各種麵包類" },
+        { "name": "藍莓乳酪佛卡夏", "price": 40, "category": "各種麵包類" },
+        { "name": "蘋果核桃佛卡夏", "price": 45, "category": "各種麵包類" },
+        { "name": "牧場蛋沙拉佛卡夏", "price": 55, "category": "各種麵包類" },
+        { "name": "里肌豬排佛卡夏", "price": 65, "category": "各種麵包類" },
+        { "name": "1983經典豬肉總匯", "price": 79, "category": "吐司及三明治類" },
+        { "name": "早美肯瓊辣雞總匯", "price": 85, "category": "吐司及三明治類" },
+        { "name": "藍莓乳酪貝果", "price": 50, "category": "漢堡類" },
+        { "name": "瑞士草莓貝果", "price": 55, "category": "漢堡類" },
+        { "name": "蘋果核桃貝果", "price": 60, "category": "漢堡類" },
+        { "name": "蘋果核桃燒餅", "price": 60, "category": "各種麵包類" },
+        { "name": "起司蛋燒餅", "price": 69, "category": "各種麵包類" },
+        { "name": "培根蛋燒餅", "price": 69, "category": "各種麵包類" },
+        { "name": "手作薯泥可頌", "price": 65, "category": "各種麵包類" },
+        { "name": "鮪魚沙拉可頌", "price": 69, "category": "各種麵包類" },
+        { "name": "鐵板豬柳可頌", "price": 69, "category": "各種麵包類" },
+        { "name": "藍莓乳酪軟法", "price": 40, "category": "各種麵包類" },
+        { "name": "蘋果核桃軟法", "price": 50, "category": "各種麵包類" },
+        { "name": "早美肯瓊辣雞軟法", "price": 55, "category": "各種麵包類" },
+        { "name": "履歷荷包蛋", "price": 15, "category": "點心類" },
+        { "name": "熱狗", "price": 25, "category": "點心類" },
+        { "name": "薯餅", "price": 25, "category": "點心類" },
+        { "name": "紫心QQ球", "price": 25, "category": "點心類" },
+        { "name": "小鬆餅", "price": 29, "category": "點心類" },
+        { "name": "炸糕", "price": 35, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "香蒜麵包", "price": 40, "category": "各種麵包類" },
+        { "name": "雞塊", "price": 40, "category": "點心類" },
+        { "name": "德式香腸", "price": 40, "category": "點心類" },
+        { "name": "蔥抓餅", "price": 45, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "黃金脆薯", "price": 49, "category": "點心類" },
+        { "name": "手工月亮蝦餅", "price": 49, "category": "點心類" },
+        { "name": "早美雞腿排(單點)", "price": 55, "category": "點心類" },
+        { "name": "招牌日式水煎餃", "price": 60, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "招牌黃金水煎餃", "price": 60, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "高麗菜豬肉水餃", "price": 65, "category": "抓餅蘿蔔糕煎餃類" },
+        { "name": "三杯醬豬柳鐵板麵", "price": 65, "category": "各種麵類" },
+        { "name": "蘑菇醬豬柳鐵板麵", "price": 65, "category": "各種麵類" },
+        { "name": "黑胡椒醬豬柳鐵板麵", "price": 65, "category": "各種麵類" },
+        { "name": "三杯醬豬柳鐵板烏龍麵", "price": 90, "category": "各種麵類" },
+        { "name": "蘑菇醬豬柳鐵板烏龍麵", "price": 90, "category": "各種麵類" },
+        { "name": "黑胡椒醬豬柳鐵板烏龍麵", "price": 90, "category": "各種麵類" },
+        { "name": "美味鍋燒意麵", "price": 90, "category": "各種麵類" },
+        { "name": "美味鍋燒雞絲麵", "price": 90, "category": "各種麵類" },
+        { "name": "美味鍋燒烏龍麵", "price": 120, "category": "各種麵類" },
+        { "name": "懷舊沙茶鍋燒意麵", "price": 100, "category": "各種麵類" },
+        { "name": "懷舊沙茶鍋燒雞絲麵", "price": 100, "category": "各種麵類" },
+        { "name": "懷舊沙茶鍋燒烏龍麵", "price": 130, "category": "各種麵類" },
+        { "name": "川香椒麻鍋燒意麵", "price": 110, "category": "各種麵類" },
+        { "name": "川香椒麻鍋燒雞絲麵", "price": 110, "category": "各種麵類" },
+        { "name": "川香椒麻鍋燒烏龍麵", "price": 140, "category": "各種麵類" },
+        { "name": "A 南洋風情餐", "price": 129, "category": "套餐" },
+        { "name": "B 雙醬朝食厚吐司餐", "price": 139, "category": "套餐" },
+        { "name": "C 金黃豬柳總匯", "price": 159, "category": "套餐" },
+        { "name": "D 經典里肌豬排", "price": 169, "category": "套餐" },
+        { "name": "E 德式香腸鬆餅餐", "price": 189, "category": "套餐" },
+        { "name": "G 歡樂兒童餐", "price": 95, "category": "套餐" },
+        { "name": "(小)台灣四季春", "price": 20, "category": "飲料" },
+        { "name": "(大)台灣四季春", "price": 25, "category": "飲料" },
+        { "name": "(小)極品紅茶", "price": 20, "category": "飲料" },
+        { "name": "(大)極品紅茶", "price": 25, "category": "飲料" },
+        { "name": "(小)皇家奶茶", "price": 25, "category": "飲料" },
+        { "name": "(大)皇家奶茶", "price": 30, "category": "飲料" },
+        { "name": "(小)可可亞", "price": 30, "category": "飲料" },
+        { "name": "(大)可可亞", "price": 40, "category": "飲料" },
+        { "name": "(大)非基改豆漿", "price": 25, "category": "飲料" },
+        { "name": "(小)招牌咖啡", "price": 25, "category": "飲料" },
+        { "name": "(大)招牌咖啡", "price": 30, "category": "飲料" },
+        { "name": "(小)牧場鮮奶茶", "price": 35, "category": "飲料" },
+        { "name": "(大)牧場鮮奶茶", "price": 45, "category": "飲料" },
+        { "name": "(小)牧場鮮奶青", "price": 35, "category": "飲料" },
+        { "name": "(大)牧場鮮奶青", "price": 45, "category": "飲料" },
+        { "name": "(小)鮮乳坊鮮乳", "price": 40, "category": "飲料" },
+        { "name": "美式咖啡", "price": 35, "category": "飲料" },
+        { "name": "牧場拿鐵", "price": 60, "category": "飲料" }
+      ]
+    },
+    {
+      "store": "麥當勞早餐",
+      "menu": [
+        { "name": "酪梨醬豬肉滿福堡加蛋", "price": 85, "category": "漢堡類" },
+        { "name": "酪梨醬滿福堡", "price": 77, "category": "漢堡類" },
+        { "name": "酪梨醬無敵豬肉滿福堡加蛋", "price": 105, "category": "漢堡類" },
+        { "name": "酪梨醬豬肉滿福堡", "price": 75, "category": "漢堡類" },
+        { "name": "酪梨醬青蔬滿福堡", "price": 85, "category": "漢堡類" },
+        { "name": "豬肉滿福堡加蛋", "price": 60, "category": "漢堡類" },
+        { "name": "豬肉滿福堡", "price": 50, "category": "漢堡類" },
+        { "name": "無敵豬肉滿福堡加蛋", "price": 80, "category": "漢堡類" },
+        { "name": "滿福堡", "price": 52, "category": "漢堡類" },
+        { "name": "青蔬滿福堡", "price": 60, "category": "漢堡類" },
+        { "name": "豬肉蛋堡", "price": 64, "category": "漢堡類" },
+        { "name": "火腿蛋堡", "price": 52, "category": "漢堡類" },
+        { "name": "吉事蛋堡", "price": 34, "category": "漢堡類" },
+        { "name": "蕈菇嫩蛋焙果堡", "price": 91, "category": "各種麵包類" },
+        { "name": "番茄嫩蛋焙果堡", "price": 71, "category": "各種麵包類" },
+        { "name": "現烤焙果", "price": 57, "category": "各種麵包類" },
+        { "name": "雞塊鬆餅大早餐", "price": 111, "category": "各種麵包類" },
+        { "name": "豬肉鬆餅", "price": 71, "category": "各種麵包類" },
+        { "name": "鬆餅(3片)", "price": 57, "category": "各種麵包類" },
+        { "name": "麥香魚", "price": 52, "category": "漢堡類" },
+        { "name": "麥香雞", "price": 52, "category": "漢堡類" },
+        { "name": "麥克雞塊(6塊)", "price": 68, "category": "點心類" },
+        { "name": "麥克雞塊(10塊)", "price": 109, "category": "點心類" },
+        { "name": "金黃薯餅", "price": 37, "category": "點心類" },
+        { "name": "蘋果派", "price": 40, "category": "點心類" }
+      ]
+    }
+  ];
+
+  // 食物類別（模式 B 的按鈕；想新增類別就加一行，再把餐點的 category 填成同樣的 key）
+  const CATEGORIES = [
+    { key: '蛋餅類',            label: '蛋餅類',            emoji: '🥞' },
+    { key: '漢堡類',            label: '漢堡類',            emoji: '🍔' },
+    { key: '吐司及三明治類',    label: '吐司及三明治類',    emoji: '🍞' },
+    { key: '各種麵類',          label: '各種麵類',          emoji: '🍜' },
+    { key: '飯及飯糰類',        label: '飯及飯糰類',        emoji: '🍙' },
+    { key: '各種麵包類',        label: '各種麵包類',        emoji: '🥐' },
+    { key: '抓餅蘿蔔糕煎餃類',  label: '抓餅蘿蔔糕煎餃類',  emoji: '🥟' },
+    { key: '點心類',            label: '點心類',            emoji: '🍟' },
+    { key: '沙拉',              label: '沙拉',              emoji: '🥗' },
+    { key: '套餐',              label: '套餐',              emoji: '🍱' },
+    { key: '飲料',              label: '飲料',              emoji: '🥤' }
+  ];
+  const COLORS = ['#ffd166', '#ff9f68', '#7ddfc0', '#ffb3a7', '#a8e063', '#ffc15e', '#8fd3f4', '#f7a8d0'];   // 店家輪盤：鮮豔暖色
+  const MENU_COLORS = ['#e3cfb8', '#bfcfbe', '#e0bfb6', '#b3c6d3', '#ebdcb5', '#cdc0d3', '#e8c9b5', '#bcd5cd']; // 菜單輪盤：莫蘭迪色
+  const PRICE_LIMIT = 50;                 // 價格分界：<=50 算「50 元以下」，>50 算「超過 50 元」
+  const DENSE_N = 24;                     // 扇形超過這個數量，輪盤文字改成單行
+  const LINE_CHARS = 8, MAX_LINES = 3;    // 輪盤文字：每行 8 字、最多 3 行
+  const STORAGE_KEY = 'breakfast-wheel-v3';
+
+  // ===== localStorage：只存「你自訂的變動」，程式碼裡的預設菜單更新後，訪客也會自動拿到新版 =====
+  const emptyCustom = () => ({ addedStores: [], addedItems: {}, removedStores: [], removedItems: {} });
+  function loadCustom() {
+    const d = emptyCustom();
+    try {
+      const c = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (c) {
+        if (Array.isArray(c.addedStores)) d.addedStores = c.addedStores.filter(x => x && typeof x.store === 'string' && Array.isArray(x.menu));
+        if (Array.isArray(c.removedStores)) d.removedStores = c.removedStores;
+        if (c.addedItems && typeof c.addedItems === 'object') d.addedItems = c.addedItems;
+        if (c.removedItems && typeof c.removedItems === 'object') d.removedItems = c.removedItems;
+      }
+    } catch (e) {}
+    return d;
+  }
+  function saveCustom() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(custom)); } catch (e) {} }
+
+  // 預設資料 + 自訂變動 → 實際使用的店家清單
+  function buildStores() {
+    const res = [];
+    STORE_DATA.forEach(d => {
+      if (custom.removedStores.includes(d.store)) return;
+      const rm = custom.removedItems[d.store] || [];
+      res.push({ name: d.store, menu: d.menu.filter(m => !rm.includes(m.name)).concat(custom.addedItems[d.store] || []) });
+    });
+    custom.addedStores.forEach(d => res.push({ name: d.store, menu: d.menu }));
+    return res;
+  }
+
+  // ===== 狀態 =====
+  let custom = loadCustom();
+  let stores = buildStores();
+  let tab = 'A';              // 'A' = 我要選早餐店；'B' = 今天我要吃這個
+  let catFilter = '';         // 模式 B 選到的類別 key（空字串 = 還沒選）
+  let mode = 'store';         // 'store' = 店家輪盤；'menu' = 菜單輪盤
+  let curName = '';           // 菜單輪盤目前的店名
+  let openName = '';          // 右側名單展開的店名
+  let lastWinnerName = '';    // 最近抽中（或點選）的店名
+  let priceFilter = 'all';    // 'all' 不限 / 'low' 50 元以下 / 'high' 超過 50 元
+  let menuCat = '';           // 模式 A 菜單輪盤目前選的分類（空字串 = 全部）
+  let editing = false;        // 管理模式
+  let rotation = 0, spinning = false;
+
+  const $ = id => document.getElementById(id);
+  const canvas = $('wheel'), ctx = canvas.getContext('2d');
+  const spinBtn = $('spinBtn'), hint = $('hint');
+  const findStore = name => stores.find(s => s.name === name);
+  const catInfo = key => CATEGORIES.find(c => c.key === key) || { key, label: key, emoji: '🍽️' };
+  const priceText = it => (typeof it.price === 'number' ? ' $' + it.price : '');
+
+  // 目前範圍內的店家：模式 B 選了類別 → 只留下有賣該類別的店
+  function scopeStores() { return stores.filter(s => !catFilter || s.menu.some(m => m.category === catFilter)); }
+  // 目前生效的分類：模式 B = 選的類別；模式 A（進入某家店後）= 分類列選的分類
+  const effCat = () => (tab === 'B' ? catFilter : (mode === 'menu' ? menuCat : ''));
+  // 模式 B 選了類別、且還沒進入某家店 → 輪盤放「該類別所有店家的全部品項」
+  const catAll = () => tab === 'B' && !!catFilter && mode === 'store';
+  const itemWheel = () => mode === 'menu' || catAll();      // 輪盤上是餐點（而不是店名）
+  function priceOk(m) {
+    return priceFilter === 'all' || (typeof m.price === 'number' && (priceFilter === 'low' ? m.price <= PRICE_LIMIT : m.price > PRICE_LIMIT));
+  }
+  // 單一店家的菜單：依分類與價格篩選
+  function menuItems() {
+    const s = findStore(curName), ec = effCat();
+    return s ? s.menu.filter(m => (!ec || m.category === ec) && priceOk(m)) : [];
+  }
+  // 某類別在所有店家的全部品項（每項帶上店名 store）
+  function catItems() {
+    const out = [];
+    stores.forEach(s => s.menu.forEach(m => { if (m.category === catFilter && priceOk(m)) out.push({ name: m.name, price: m.price, category: m.category, store: s.name }); }));
+    return out;
+  }
+  // 輪盤上的項目：店家輪盤 = [{name}]；單店菜單 / 類別總輪盤 = [{name, price, ...}]
+  function items() {
+    if (mode === 'menu') return menuItems();
+    if (catAll()) return catItems();
+    return scopeStores().map(s => ({ name: s.name }));
+  }
+
+  // 扇形顏色（避免最後一塊與第一塊同色）；pal 可指定店家色盤或菜單色盤
+  function colorOf(i, n, pal = COLORS) {
+    let c = i % pal.length;
+    if (i === n - 1 && i > 0 && c === 0) c = 2;
+    return pal[c];
+  }
+  // 文字換行：每行 LINE_CHARS 字，最多 MAX_LINES 行，超過就在最後加「…」（需求 4）
+  function wrapText(str) {
+    const chars = Array.from(str);
+    const out = [];
+    for (let i = 0; i < chars.length && out.length < MAX_LINES; i += LINE_CHARS) out.push(chars.slice(i, i + LINE_CHARS).join(''));
+    if (chars.length > LINE_CHARS * MAX_LINES) out[MAX_LINES - 1] = Array.from(out[MAX_LINES - 1]).slice(0, -1).join('') + '…';
+    return out;
+  }
+
+  // 產生輪盤上的文字行：店家只有店名；菜單會在品名後面加上金額（需求：品項後面加金額）
+  function labelLines(it, n) {
+    const price = typeof it.price === 'number' ? '$' + it.price : '';
+    const nm = it.store ? it.store.slice(0, 2) + '·' + it.name : it.name;      // 類別總輪盤：加店名前兩字，才分得出是哪家
+    if (n > DENSE_N) return [price ? nm + ' ' + price : nm];   // 扇形很多：單行「品名 $價格」
+    const lines = wrapText(nm);
+    if (price) {
+      const last = lines[lines.length - 1];
+      if (Array.from(last).length + 1 + price.length <= LINE_CHARS + 2) lines[lines.length - 1] = last + ' ' + price;
+      else lines.push(price);                                           // 放不下就把金額獨立一行
+    }
+    return lines;
+  }
+
+  // ===== 繪製輪盤 =====
+  function drawWheel() {
+    const list = items(), n = list.length, size = 840, r = size / 2;   // 邏輯座標固定 840，畫布實際是 2 倍解析度
+    const k = canvas.width / size;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+    if (n === 0) { ctx.fillStyle = '#f3e3bd'; ctx.beginPath(); ctx.arc(r, r, r, 0, 7); ctx.fill(); return; }
+    const arc = (Math.PI * 2) / n, dense = n > DENSE_N;
+    const lw = n > 60 ? 0.8 : n > 30 ? 1.5 : n > 16 ? 2.5 : 4;          // 扇形越多，分隔線越細
+    list.forEach((it, i) => {
+      ctx.beginPath(); ctx.moveTo(r, r);
+      ctx.arc(r, r, r, i * arc, (i + 1) * arc); ctx.closePath();
+      ctx.fillStyle = colorOf(i, n, itemWheel() ? MENU_COLORS : COLORS); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = lw; ctx.stroke();
+      ctx.save();
+      ctx.translate(r, r); ctx.rotate(i * arc + arc / 2);
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#3b2a1a';
+      // 字級依「行數、最長行字數、扇形寬度」自動縮放；扇形再多也會全部列出
+      const lines = labelLines(it, n);
+      const longest = Math.max(...lines.map(l => Array.from(l).length));
+      const fs = Math.max(5, Math.min(46, (dense ? 300 : 290) / longest, ((dense ? 300 : 230) * arc * 0.85) / (lines.length * 1.15)));
+      ctx.font = `800 ${fs}px "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif`;
+      lines.forEach((ln, j) => ctx.fillText(ln, r - (dense ? 24 : 40), (j - (lines.length - 1) / 2) * fs * 1.15));
+      ctx.restore();
+    });
+  }
+
+
+  // ===== 資料異動（管理模式）=====
+  function refreshData() {
+    stores = buildStores(); saveCustom();
+    if (mode === 'menu' && !findStore(curName)) { mode = 'store'; curName = ''; resetWheel(); }
+    if (lastWinnerName && !findStore(lastWinnerName)) lastWinnerName = '';
+    if (openName && !findStore(openName)) openName = '';
+    render();
+  }
+  function addStore(name) { custom.addedStores.push({ store: name, menu: [] }); openName = name; refreshData(); }
+  function removeStore(name) {
+    const i = custom.addedStores.findIndex(x => x.store === name);
+    if (i >= 0) custom.addedStores.splice(i, 1); else custom.removedStores.push(name);
+    refreshData();
+  }
+  function addItem(store, item) {
+    const c = custom.addedStores.find(x => x.store === store);
+    if (c) c.menu.push(item); else (custom.addedItems[store] = custom.addedItems[store] || []).push(item);
+    refreshData();
+  }
+  function removeItem(store, name) {
+    const c = custom.addedStores.find(x => x.store === store);
+    const arr = c ? c.menu : custom.addedItems[store];
+    const j = arr ? arr.findIndex(m => m.name === name) : -1;
+    if (j >= 0) arr.splice(j, 1); else (custom.removedItems[store] = custom.removedItems[store] || []).push(name);
+    refreshData();
+  }
+
+  // ===== 模式 B：類別按鈕 =====
+  function renderCats() {
+    const g = $('catGrid'); g.innerHTML = '';
+    CATEGORIES.forEach(c => {
+      const n = stores.filter(s => s.menu.some(m => m.category === c.key)).length;
+      const b = document.createElement('button'); b.className = 'cat-btn'; b.disabled = n === 0 || spinning;
+      b.innerHTML = `<span class="em">${c.emoji}</span><span class="lb">${c.label}</span><span class="sm">${n ? n + ' 家有賣' : '目前沒有店家'}</span>`;
+      b.onclick = () => pickCat(c.key);
+      g.appendChild(b);
+    });
+  }
+
+  // ===== 快捷直達：輪盤下方的店家按鈕 =====
+  function renderQuick() {
+    const list = $('quickList'); list.innerHTML = '';
+    const sc = scopeStores(), show = mode === 'store' && sc.length > 0;
+    $('quick').hidden = !show;
+    if (!show) return;
+    $('quickTitle').textContent = catFilter ? `或自己決定，直接點選有賣「${catInfo(catFilter).label}」的店：` : '早就決定好了？直接點選早餐店，馬上進入菜單輪盤：';
+    sc.forEach(s => {
+      const cnt = catFilter ? s.menu.filter(m => m.category === catFilter).length : s.menu.length;
+      const b = document.createElement('button'); b.disabled = spinning; b.textContent = `${s.name}（${cnt} 道）`;
+      b.onclick = () => { if (spinning) return; lastWinnerName = s.name; enterMenu(s.name); };
+      list.appendChild(b);
+    });
+  }
+
+  // ===== 右側名單（點 🍽️ 展開菜單；管理模式可新增/刪除）=====
+  function renderList() {
+    $('storeAddRow').hidden = !editing; $('resetRow').hidden = !editing;
+    $('editBtn').classList.toggle('on', editing); $('editBtn').textContent = editing ? '✅ 完成' : '✏️ 管理名單';
+    const ul = $('list'); ul.innerHTML = '';
+    stores.forEach((s, i) => {
+      const li = document.createElement('li');
+      li.className = 'store' + (mode === 'menu' && s.name === curName ? ' current' : '') + (mode === 'store' && s.name === lastWinnerName ? ' picked' : '');
+      const row = document.createElement('div'); row.className = 'row';
+      const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = colorOf(i, stores.length);
+      const txt = document.createElement('span'); txt.className = 'name'; txt.textContent = s.name;
+      const badge = document.createElement('span'); badge.className = 'badge'; badge.textContent = s.menu.length + ' 道菜';
+      const mb = document.createElement('button'); mb.className = 'icon-btn'; mb.textContent = '🍽️';
+      mb.title = '查看菜單：' + s.name; mb.setAttribute('aria-label', '查看菜單：' + s.name); mb.setAttribute('aria-expanded', String(openName === s.name));
+      mb.onclick = () => { openName = openName === s.name ? '' : s.name; renderList(); };
+      row.append(dot, txt, badge, mb);
+      if (editing) {
+        const del = document.createElement('button'); del.className = 'icon-btn del'; del.textContent = '🗑️';
+        del.title = '刪除 ' + s.name; del.setAttribute('aria-label', '刪除 ' + s.name); del.disabled = spinning;
+        del.onclick = () => { if (!spinning && confirm(`確定要刪除「${s.name}」嗎？`)) removeStore(s.name); };
+        row.append(del);
+      }
+      li.appendChild(row);
+      if (openName === s.name) li.appendChild(buildMenuPanel(s));
+      ul.appendChild(li);
+    });
+    $('count').textContent = `共 ${stores.length} 家早餐店`;
+  }
+
+  function buildMenuPanel(s) {
+    const box = document.createElement('div'); box.className = 'menu-panel';
+    const h = document.createElement('h3'); h.textContent = s.name + ' 的菜單'; box.appendChild(h);
+    const ul = document.createElement('ul');
+    s.menu.forEach(m => {
+      const li = document.createElement('li');
+      const t = document.createElement('span'); t.className = 'name'; t.textContent = m.name;
+      const c = document.createElement('span'); c.className = 'cat'; c.textContent = catInfo(m.category).key;
+      const p = document.createElement('span'); p.className = 'price'; p.textContent = typeof m.price === 'number' ? '$' + m.price : '';
+      li.append(t, c, p);
+      if (editing) {
+        const d = document.createElement('button'); d.className = 'icon-btn del'; d.textContent = '✕';
+        d.title = '刪除 ' + m.name; d.setAttribute('aria-label', '刪除餐點 ' + m.name); d.disabled = spinning;
+        d.onclick = () => { if (!spinning && confirm(`確定要刪除「${m.name}」嗎？`)) removeItem(s.name, m.name); };
+        li.append(d);
+      }
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    if (editing) {   // 新增餐點：名稱、價格、分類
+      const row = document.createElement('div'); row.className = 'add-row';
+      const n = document.createElement('input'); n.type = 'text'; n.maxLength = 30; n.placeholder = '餐點名稱'; n.setAttribute('aria-label', '餐點名稱');
+      const p = document.createElement('input'); p.type = 'number'; p.min = '0'; p.placeholder = '金額'; p.setAttribute('aria-label', '金額');
+      const sel = document.createElement('select'); sel.setAttribute('aria-label', '分類');
+      CATEGORIES.forEach(c => { const o = document.createElement('option'); o.value = c.key; o.textContent = c.emoji + ' ' + c.key; sel.appendChild(o); });
+      const b = document.createElement('button'); b.className = 'btn-add'; b.textContent = '新增餐點';
+      const add = () => {
+        const name = n.value.trim(), price = Number(p.value);
+        if (spinning) return;
+        if (!name) return say('請輸入餐點名稱。');
+        if (p.value === '' || !(price >= 0)) return say('請輸入正確的金額。');
+        if (s.menu.some(m => m.name === name)) return say('這家店已經有同名餐點了。');
+        addItem(s.name, { name, price, category: sel.value });
+      };
+      b.onclick = add; n.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+      row.append(n, p, sel, b); box.appendChild(row);
+    }
+    return box;
+  }
+  function say(msg) { hint.textContent = msg; }
+
+  // ===== 整體渲染 =====
+  // 模式 A：進入某家店後的「分類」按鈕（數字 = 套用目前價格條件後的道數）
+  function renderFilters() {
+    const row = $('catFilterBtns'); row.innerHTML = '';
+    const s = findStore(curName);
+    if (!(tab === 'A' && mode === 'menu' && s)) return;
+    const cnt = key => s.menu.filter(m => (!key || m.category === key) && priceOk(m)).length;
+    const mk = (key, label) => {
+      const b = document.createElement('button'); b.textContent = `${label} (${cnt(key)})`;
+      b.className = menuCat === key ? 'active' : ''; b.disabled = spinning || cnt(key) === 0;
+      b.onclick = () => { if (spinning) return; menuCat = key; resetWheel(); render(); };
+      row.appendChild(b);
+    };
+    mk('', '全部');
+    CATEGORIES.forEach(c => { if (s.menu.some(m => m.category === c.key)) mk(c.key, c.emoji + ' ' + c.label); });
+  }
+  function render() { renderCats(); renderList(); renderQuick(); renderFilters(); drawWheel(); updateUI(); }
+
+  function updateUI() {
+    const isMenu = mode === 'menu', catW = catAll(), itemW = isMenu || catW;
+    const inCat = tab === 'B' && !!catFilter, showCats = tab === 'B' && !catFilter;
+    const list = items(), n = list.length, ok = n >= 2, ec = effCat(), cat = ec ? catInfo(ec) : null;
+    $('tabA').classList.toggle('active', tab === 'A'); $('tabB').classList.toggle('active', tab === 'B');
+    $('tabA').disabled = $('tabB').disabled = spinning;
+    $('catCard').hidden = !showCats; $('wheelCard').hidden = showCats;
+    $('modeBar').classList.toggle('show', isMenu || inCat);
+    $('toStoreBtn').hidden = !isMenu; $('toCatBtn').hidden = !inCat;
+    $('toStoreBtn').textContent = inCat ? `↩ 返回${cat.label}總輪盤` : '↩ 返回店家輪盤';
+    $('toStoreBtn').disabled = $('toCatBtn').disabled = spinning;
+    $('priceFilter').classList.toggle('show', itemW);
+    $('catFilterRow').classList.toggle('show', isMenu && tab === 'A');
+    document.querySelectorAll('#priceFilter button').forEach(b => { b.classList.toggle('active', b.dataset.v === priceFilter); b.disabled = spinning; });
+    $('wheelWrap').classList.toggle('menu', itemW);
+    $('hub').textContent = itemW ? '🍽️' : '☀️';
+    $('modeLabel').textContent = isMenu ? `🍽️ ${curName}${cat ? '・' + cat.label : ''} 的菜單輪盤（${n} 道）`
+      : catW ? `${cat.emoji} ${cat.label}：全部 ${n} 道，來自 ${new Set(list.map(x => x.store)).size} 家店` : '';
+    spinBtn.textContent = itemW ? '開始抽餐點' : '開始抽籤';
+    spinBtn.disabled = spinning || !ok;
+    // 選完店家後，輪盤下方常駐「抽這家的菜單」按鈕（彈窗關掉也還在）
+    const showGo = !isMenu && lastWinnerName && findStore(lastWinnerName);
+    $('goMenuInline').style.display = showGo ? '' : 'none';
+    $('goMenuInline').textContent = showGo ? `🍽️ 抽「${lastWinnerName}」的${cat ? cat.label : ''}菜單` : '';
+    $('goMenuInline').disabled = spinning;
+    if (ok) hint.textContent = '';
+    else if (n === 1) hint.textContent = itemW ? `這個條件下只有 1 道：${list[0].name}${priceText(list[0])}，不用轉囉！` : `只有「${list[0].name}」符合，請直接點選下方的店家。`;
+    else hint.textContent = itemW ? '目前條件下餐點不足 2 道，無法抽籤，請換個條件。' : '店家不足 2 家，無法抽籤。';
+  }
+
+  // ===== 導覽：分頁、類別、返回 =====
+  function resetWheel() { rotation = 0; canvas.style.transform = 'rotate(0deg)'; }
+  function setTab(t) { if (spinning || t === tab) return; tab = t; catFilter = ''; mode = 'store'; curName = ''; lastWinnerName = ''; resetWheel(); render(); }
+  function pickCat(key) { if (spinning) return; catFilter = key; priceFilter = 'all'; mode = 'store'; curName = ''; lastWinnerName = ''; resetWheel(); render(); }
+  function toCat() { if (spinning) return; catFilter = ''; mode = 'store'; curName = ''; lastWinnerName = ''; resetWheel(); render(); }
+  function enterMenu(name) { mode = 'menu'; curName = name; priceFilter = 'all'; menuCat = ''; resetWheel(); render(); }
+  function backToStore() { if (spinning) return; mode = 'store'; curName = ''; resetWheel(); render(); }
+  $('tabA').onclick = () => setTab('A');
+  $('tabB').onclick = () => setTab('B');
+  $('toCatBtn').onclick = toCat;
+  $('toStoreBtn').onclick = backToStore;
+  $('priceFilter').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || spinning) return;
+    priceFilter = b.dataset.v; resetWheel(); render();
+  });
+
+  // ===== 管理模式的操作 =====
+  $('editBtn').onclick = () => { if (spinning) return; editing = !editing; render(); };
+  function addStoreFromInput() {
+    const input = $('nameInput'), name = input.value.trim();
+    if (spinning) return;
+    if (!name) return say('請先輸入店名。');
+    if (findStore(name)) return say('這家店已經在名單裡了。');
+    input.value = ''; addStore(name);
+  }
+  $('addBtn').onclick = addStoreFromInput;
+  $('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') addStoreFromInput(); });
+  $('resetBtn').onclick = () => { if (!spinning && confirm('確定要清除所有自訂的店家與菜色，還原成預設名單嗎？')) { custom = emptyCustom(); refreshData(); } };
+
+  // ===== 抽籤動畫 =====
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+
+  function spin() {
+    const list = items();
+    if (spinning || list.length < 2) return;
+    if (mode === 'store') lastWinnerName = '';   // 重抽店家時先清掉上一次的結果
+    spinning = true; hint.textContent = ''; render();
+    const n = list.length, arc = 360 / n;
+    const winner = Math.floor(Math.random() * n);
+    // 指針在正上方（畫布角度 270°），讓該扇形內的隨機一點停在指針處
+    const targetAngle = (winner + 0.15 + Math.random() * 0.7) * arc;
+    const delta = (((270 - targetAngle) - (rotation % 360)) % 360 + 360) % 360;
+    const start = rotation, end = rotation + (5 + Math.floor(Math.random() * 3)) * 360 + delta;
+    const duration = 3000 + Math.random() * 1000;
+    const t0 = performance.now(), result = list[winner];
+
+    (function frame(now) {
+      const t = Math.min((now - t0) / duration, 1);
+      rotation = start + (end - start) * easeOut(t);
+      canvas.style.transform = `rotate(${rotation}deg)`;
+      if (t < 1) return requestAnimationFrame(frame);
+      spinning = false; render(); showResult(result);
+    })(t0);
+  }
+  spinBtn.onclick = spin;
+
+  // ===== 結果彈窗 =====
+  function showResult(item) {
+    const isMenu = mode === 'menu', catW = catAll(), cl = catFilter ? catInfo(catFilter).label : '';
+    if (!isMenu) { lastWinnerName = item.store || item.name; render(); }   // 記住店家並更新「抽菜單」按鈕
+    $('winEmoji').textContent = isMenu ? '😋' : '🎉';
+    $('winTitle').textContent = isMenu ? `今天在「${curName}」吃：` : catW ? `想吃${cl}，就去「${item.store}」吃：` : '今天就吃：';
+    $('winName').textContent = item.name + priceText(item) + '！';
+    $('goMenuBtn').textContent = catW ? `🍽️ 只看「${item.store}」的${cl}` : '🍽️ 抽這家吃什麼？';
+    $('backBtn').textContent = cl ? `↩ 返回${cl}總輪盤` : '↩ 返回店家輪盤';
+    $('goMenuBtn').style.display = isMenu ? 'none' : '';
+    $('backBtn').style.display = isMenu ? '' : 'none';
+    $('rerollBtn').style.display = (isMenu || catW) ? '' : 'none';   // 菜單與類別總輪盤都能「再抽一次」
+    $('winNote').textContent = '';
+    $('modal').classList.add('show');
+    ((isMenu || catW) ? $('closeBtn') : $('goMenuBtn')).focus();
+    confetti();
+  }
+  const closeModal = () => $('modal').classList.remove('show');
+  $('closeBtn').onclick = closeModal;
+  $('backBtn').onclick = () => { closeModal(); backToStore(); };
+  $('rerollBtn').onclick = () => { closeModal(); spin(); };   // 再抽一次：同一家店、同一個條件
+
+  // 進入「這家店的菜單輪盤」：彈窗按鈕與輪盤下方常駐按鈕共用
+  function goMenu() {
+    if (spinning) return;
+    const st = findStore(lastWinnerName);
+    if (!st || st.menu.filter(m => !catFilter || m.category === catFilter).length < 2) {
+      const msg = `「${lastWinnerName}」的菜單還不夠 2 道，暫時無法抽餐點。`;
+      $('winNote').textContent = msg; hint.textContent = msg;
+      return;
+    }
+    closeModal(); enterMenu(lastWinnerName);
+  }
+  $('goMenuBtn').onclick = goMenu;
+  $('goMenuInline').onclick = goMenu;
+  $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  // ===== 撒花效果 =====
+  function confetti() {
+    const cv = $('confetti'), c = cv.getContext('2d');
+    cv.width = innerWidth; cv.height = innerHeight;
+    const parts = Array.from({ length: 140 }, () => ({
+      x: cv.width / 2, y: cv.height * 0.4,
+      vx: (Math.random() - 0.5) * 16, vy: -Math.random() * 16 - 4,
+      w: 6 + Math.random() * 8, h: 8 + Math.random() * 10,
+      rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)]
+    }));
+    const t0 = performance.now();
+    (function tick(now) {
+      const life = now - t0;
+      c.clearRect(0, 0, cv.width, cv.height);
+      parts.forEach(p => {
+        p.vy += 0.3; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+        c.save(); c.translate(p.x, p.y); c.rotate(p.rot);
+        c.globalAlpha = Math.max(0, 1 - life / 3500);
+        c.fillStyle = p.color; c.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); c.restore();
+      });
+      if (life < 3500) requestAnimationFrame(tick); else c.clearRect(0, 0, cv.width, cv.height);
+    })(t0);
+  }
+
+
+  render();
+})();
+</script>
+</body>
+</html>
